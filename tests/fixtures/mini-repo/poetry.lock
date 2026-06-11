@@ -1,0 +1,4 @@
+# This lockfile must never be packed.
+[[package]]
+name = "noise"
+version = "1.0.0"

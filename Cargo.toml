@@ -1,0 +1,27 @@
+[package]
+name = "contextcut"
+version = "0.1.0"
+edition = "2024"
+description = "Pack a repository into ultra-dense, AI-optimized Markdown — gitignore-aware, noise-pruned, with token estimates"
+license = "MIT"
+repository = "https://github.com/pallaprolus/contextcut"
+keywords = ["llm", "ai", "context", "cli", "markdown"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+content_inspector = "0.2"
+globset = "0.4"
+ignore = "0.4"
+tiktoken-rs = "0.7"
+
+[dev-dependencies]
+assert_cmd = "2"
+insta = "1"
+predicates = "3"
+tempfile = "3"
+
+[profile.release]
+lto = true
+strip = true

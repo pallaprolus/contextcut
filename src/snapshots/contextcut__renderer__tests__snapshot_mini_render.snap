@@ -1,0 +1,26 @@
+---
+source: src/renderer.rs
+expression: markdown
+---
+# demo
+
+## File tree
+
+```
+src/
+  main.py
+README.md
+```
+
+## src/main.py
+
+```python
+def main():
+    pass
+```
+
+## README.md
+
+```markdown
+# Demo
+```
