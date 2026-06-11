@@ -1,6 +1,6 @@
 # ContextCut
 
-[![CI](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml/badge.svg)](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml)
+[![CI](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml/badge.svg)](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/contextcut.svg)](https://crates.io/crates/contextcut)
 
 **Pack a repository into ultra-dense, AI-optimized Markdown — with token estimates before you paste.**
 
@@ -22,8 +22,8 @@ Real-world result: a 2,240-file / 38 MB Python repo → 114 files / 0.4 MB of si
 ## Install
 
 ```bash
-cargo install --git https://github.com/pallaprolus/contextcut
-# (crates.io / Homebrew distribution planned)
+cargo install contextcut
+# (Homebrew tap planned)
 ```
 
 ## Usage
