@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod deps;
 pub mod diff;
+pub mod exact;
 pub mod pruner;
 pub mod renderer;
 pub mod strip;
@@ -92,6 +93,19 @@ pub fn run(cli: &Cli) -> Result<()> {
 
     let markdown = renderer::render(&cli.path, &packed, dep_map.as_deref());
     let estimate = tokens::estimate(&markdown);
+    let exact_claude = if cli.exact_claude {
+        match exact::count(&markdown) {
+            Ok(n) => Some(n),
+            Err(err) => {
+                eprintln!(
+                    "  warning: exact Claude count unavailable ({err:#}); falling back to approximation"
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     if !cli.tokens_only {
         match &cli.output {
@@ -107,7 +121,7 @@ pub fn run(cli: &Cli) -> Result<()> {
     }
 
     eprintln!("{}", stats.summary(markdown.len()));
-    eprintln!("{}", estimate.table());
+    eprintln!("{}", estimate.table(exact_claude));
     Ok(())
 }
 

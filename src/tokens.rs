@@ -14,12 +14,18 @@ impl Estimate {
         (self.cl100k as f64 * CLAUDE_FACTOR).round() as usize
     }
 
-    pub fn table(&self) -> String {
+    pub fn table(&self, exact_claude: Option<usize>) -> String {
+        let claude_row = match exact_claude {
+            Some(n) => format!("  Claude (exact)        {:>10}", group(n)),
+            None => format!(
+                "  Claude (approx ×1.15) {:>10}",
+                group(self.claude_approx())
+            ),
+        };
         format!(
-            "  ── Estimated tokens ─────────────\n  GPT (o200k_base)      {:>10}\n  GPT-4 (cl100k_base)   {:>10}\n  Claude (approx ×1.15) {:>10}\n  Gemini (approx)       {:>10}",
+            "  ── Estimated tokens ─────────────\n  GPT (o200k_base)      {:>10}\n  GPT-4 (cl100k_base)   {:>10}\n{claude_row}\n  Gemini (approx)       {:>10}",
             group(self.o200k),
             group(self.cl100k),
-            group(self.claude_approx()),
             group(self.o200k),
         )
     }

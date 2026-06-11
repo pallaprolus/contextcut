@@ -266,8 +266,13 @@ fn setup_git() -> TempDir {
     git(&["init", "-q"]);
     git(&["add", "-A"]);
     git(&[
-        "-c", "user.name=test", "-c", "user.email=t@t",
-        "commit", "-qm", "fixture baseline",
+        "-c",
+        "user.name=test",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-qm",
+        "fixture baseline",
     ]);
     repo
 }
@@ -330,4 +335,19 @@ fn diff_outside_git_repo_fails_with_readable_error() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("git").and(predicate::str::contains("failed")));
+}
+
+#[test]
+fn exact_claude_without_key_falls_back_gracefully() {
+    let repo = setup();
+    contextcut()
+        .arg(repo.path())
+        .args(["--exact-claude", "--tokens-only"])
+        .env_remove("ANTHROPIC_API_KEY")
+        .assert()
+        .success()
+        .stderr(
+            predicate::str::contains("falling back to approximation")
+                .and(predicate::str::contains("Claude (approx")),
+        );
 }

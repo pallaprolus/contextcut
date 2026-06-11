@@ -54,6 +54,11 @@ pub struct Cli {
     #[arg(long)]
     pub map: bool,
 
+    /// Get the exact Claude token count from Anthropic's count-tokens API
+    /// (requires ANTHROPIC_API_KEY; falls back to the approximation on error)
+    #[arg(long)]
+    pub exact_claude: bool,
+
     /// Dry run: print only stats and the token table, emit no Markdown
     #[arg(long)]
     pub tokens_only: bool,
