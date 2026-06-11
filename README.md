@@ -36,12 +36,33 @@ contextcut [PATH] [OPTIONS]
 |---|---|---|
 | `PATH` | `.` | Root directory to pack |
 | `-o, --output <FILE>` | stdout | Write Markdown to a file (the stats table always goes to stderr, so stdout stays pipeable) |
+| `--related <PATH>` | — | Pack only files related to PATH in the import graph (repeatable): its imports *and* its importers |
+| `--diff [REF]` | — | Pack files changed vs REF (default `HEAD`) plus untracked files, with their import blast radius |
+| `--depth <N>` | `2` | Hops to follow in the import graph for `--related`/`--diff` |
+| `--map` | off | Append a dependency map section (`→` imports, `←` importers) to the output |
+| `--exact-claude` | off | Exact Claude count via Anthropic's count-tokens API (needs `ANTHROPIC_API_KEY`; falls back to the approximation on any error) |
 | `--tokens-only` | off | Dry run: stats + token table only, no Markdown |
 | `--strip-comments` | off | Drop full-line comments (py, rs, js/ts, go, c/cpp, java, sh, yaml/toml) |
 | `--max-file-size <SIZE>` | `64kb` | Truncate larger files with a `[truncated: N of M bytes]` marker (`4096`, `64kb`, `1mb`) |
 | `--include <GLOB>` | all | Only pack matching files (repeatable), e.g. `--include '**/*.py'` |
 | `--exclude <GLOB>` | none | Skip matching files (repeatable, applied after includes) |
 | `--no-gitignore` | off | Ignore `.gitignore` rules (built-in prunes still apply) |
+
+### Pack only the blast radius
+
+Most questions are about *part* of a codebase. ContextCut builds an import graph (Python, JS/TS, Rust, Go — lightweight line-based extraction, resolved against the real file set) and packs only what's connected:
+
+```bash
+# Working on the scheduler? Pack it, what it imports, and what imports it:
+contextcut . --related kube_foresight/scheduler.py --depth 1
+#   → 5 files / ~5k tokens instead of 114 files / ~101k
+
+# Reviewing a change? Pack the diff plus everything it can break:
+contextcut . --diff main
+
+# Add --map for an explicit imports/importers section the model can navigate by
+contextcut . --related src/api.py --map
+```
 
 ### What gets pruned automatically
 
@@ -56,7 +77,7 @@ No flags needed — this is the product's opinion:
 ## Token estimates: how they're computed
 
 - **GPT counts are exact** — real BPE via [`tiktoken-rs`](https://crates.io/crates/tiktoken-rs) (`o200k_base` for GPT-4o/5-class, `cl100k_base` for GPT-4). Verified byte-identical against Python `tiktoken`.
-- **Claude is an approximation** — Anthropic publishes no local tokenizer, so we report `cl100k × 1.15` as a rough budgeting factor (code tends to tokenize heavier on Claude). Treat it as guidance, not ground truth; exact counts via Anthropic's count-tokens API are planned for v0.2.
+- **Claude is exact with `--exact-claude`** — Anthropic publishes no local tokenizer, but their count-tokens API returns exact numbers (free to call; set `ANTHROPIC_API_KEY`). Without the flag (or on any API error) we report `cl100k × 1.15` as a rough budgeting factor, labeled "approx".
 - **Gemini is an approximation** — we reuse the `o200k_base` count as a nearby proxy, labeled "approx".
 - Special tokens (a literal `<|endoftext|>` in source) are counted as plain text, never as control tokens.
 
@@ -68,9 +89,9 @@ No flags needed — this is the product's opinion:
 
 ## Roadmap
 
-- **v0.2 — dependency mapping**: pack only files reachable from the paths you're changing, with an inline dependency tree
-- **v0.2 — live token ticker**: provider count-token APIs for exact Claude/Gemini numbers
-- **PR mode**: pack just a diff plus its blast radius
+- **v0.3 — tree-sitter comment stripping**: replaces the line-based stripper
+- **v0.3 — architecture overview mode**: `--map` without file bodies
+- Homebrew tap; Gemini count-tokens API
 
 ## Development
 
