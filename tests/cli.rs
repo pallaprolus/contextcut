@@ -248,3 +248,86 @@ fn map_section_shows_import_edges() {
                 .and(predicate::str::contains("← src/chain_a.py")),
         );
 }
+
+/// Turn the fixture copy into a real git repo with everything committed.
+fn setup_git() -> TempDir {
+    let repo = setup();
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .args(args)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(ok, "git {args:?} failed");
+    };
+    git(&["init", "-q"]);
+    git(&["add", "-A"]);
+    git(&[
+        "-c", "user.name=test", "-c", "user.email=t@t",
+        "commit", "-qm", "fixture baseline",
+    ]);
+    repo
+}
+
+#[test]
+fn diff_packs_changed_file_and_blast_radius() {
+    let repo = setup_git();
+    // Modify the leaf; importers chain_b (1 hop) and chain_a (2 hops) follow.
+    fs::write(
+        repo.path().join("src/chain_c.py"),
+        "def leaf():\n    return \"leaf-marker-c-changed\"\n",
+    )
+    .unwrap();
+    contextcut()
+        .arg(repo.path())
+        .arg("--diff")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("leaf-marker-c-changed")
+                .and(predicate::str::contains("chain_b.py"))
+                .and(predicate::str::contains("chain_a.py"))
+                .and(predicate::str::contains("standalone-island").not())
+                .and(predicate::str::contains("def main").not()),
+        );
+}
+
+#[test]
+fn diff_includes_untracked_files() {
+    let repo = setup_git();
+    fs::write(repo.path().join("src/newborn.py"), "FRESH_MARKER = 1\n").unwrap();
+    contextcut()
+        .arg(repo.path())
+        .arg("--diff")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("FRESH_MARKER")
+                .and(predicate::str::contains("standalone-island").not()),
+        );
+}
+
+#[test]
+fn diff_with_no_changes_fails_with_readable_error() {
+    let repo = setup_git();
+    contextcut()
+        .arg(repo.path())
+        .arg("--diff")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no packable changed files"));
+}
+
+#[test]
+fn diff_outside_git_repo_fails_with_readable_error() {
+    let repo = setup(); // fake empty .git dir — not a real repository
+    contextcut()
+        .arg(repo.path())
+        .arg("--diff")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("git").and(predicate::str::contains("failed")));
+}

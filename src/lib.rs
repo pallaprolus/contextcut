@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod deps;
+pub mod diff;
 pub mod pruner;
 pub mod renderer;
 pub mod strip;
@@ -43,8 +44,8 @@ pub fn run(cli: &Cli) -> Result<()> {
             FileDecision::Skip(reason) => stats.count_skip(reason),
         }
     }
-    // Import graph: needed for --related filtering and the --map section.
-    let graph = if cli.map || !cli.related.is_empty() {
+    // Import graph: needed for --related/--diff filtering and --map.
+    let graph = if cli.map || !cli.related.is_empty() || cli.diff.is_some() {
         let entries: Vec<(std::path::PathBuf, String)> = packed
             .iter()
             .map(|f| (f.rel_path.clone(), f.content.clone()))
@@ -54,16 +55,29 @@ pub fn run(cli: &Cli) -> Result<()> {
         None
     };
 
-    if !cli.related.is_empty() {
-        let graph = graph.as_ref().expect("graph built when --related is set");
-        let mut seeds = Vec::new();
-        for seed in &cli.related {
-            let rel = seed.strip_prefix(&cli.path).unwrap_or(seed).to_path_buf();
-            if !packed.iter().any(|f| f.rel_path == rel) {
-                bail!("--related {}: no packed file matches", rel.display());
-            }
-            seeds.push(rel);
+    let mut seeds = Vec::new();
+    for seed in &cli.related {
+        let rel = seed.strip_prefix(&cli.path).unwrap_or(seed).to_path_buf();
+        if !packed.iter().any(|f| f.rel_path == rel) {
+            bail!("--related {}: no packed file matches", rel.display());
         }
+        seeds.push(rel);
+    }
+    if let Some(reference) = &cli.diff {
+        // Changed files that were pruned (binaries, gitignored) are skipped,
+        // not errors — only packable changes seed the blast radius.
+        let changed = diff::changed_files(&cli.path, reference)?;
+        let packable: Vec<_> = changed
+            .into_iter()
+            .filter(|c| packed.iter().any(|f| f.rel_path == *c))
+            .collect();
+        if packable.is_empty() {
+            bail!("--diff {reference}: no packable changed files");
+        }
+        seeds.extend(packable);
+    }
+    if !seeds.is_empty() {
+        let graph = graph.as_ref().expect("graph built when seeds exist");
         let keep = graph.related(&seeds, cli.depth);
         packed.retain(|f| keep.contains(&f.rel_path));
     }

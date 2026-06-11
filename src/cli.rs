@@ -41,7 +41,12 @@ pub struct Cli {
     #[arg(long, value_name = "PATH")]
     pub related: Vec<PathBuf>,
 
-    /// Hops to follow in the import graph for --related
+    /// Pack files changed vs REF (default HEAD) plus untracked files and
+    /// their import-graph blast radius up to --depth hops
+    #[arg(long, value_name = "REF", num_args = 0..=1, default_missing_value = "HEAD")]
+    pub diff: Option<String>,
+
+    /// Hops to follow in the import graph for --related and --diff
     #[arg(long, value_name = "N", default_value_t = 2)]
     pub depth: usize,
 
