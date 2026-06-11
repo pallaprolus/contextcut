@@ -36,6 +36,19 @@ pub struct Cli {
     #[arg(long, value_name = "GLOB")]
     pub exclude: Vec<String>,
 
+    /// Pack only files related to PATH in the import graph (repeatable);
+    /// follows imports and importers up to --depth hops
+    #[arg(long, value_name = "PATH")]
+    pub related: Vec<PathBuf>,
+
+    /// Hops to follow in the import graph for --related
+    #[arg(long, value_name = "N", default_value_t = 2)]
+    pub depth: usize,
+
+    /// Include a dependency map section (imports → / importers ←) in the output
+    #[arg(long)]
+    pub map: bool,
+
     /// Dry run: print only stats and the token table, emit no Markdown
     #[arg(long)]
     pub tokens_only: bool,

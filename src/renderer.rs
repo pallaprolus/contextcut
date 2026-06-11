@@ -6,9 +6,9 @@ pub struct PackedFile {
     pub content: String,
 }
 
-/// Render the packed files as one Markdown document: a file-tree header
-/// followed by a language-tagged fenced block per file.
-pub fn render(root: &Path, files: &[PackedFile]) -> String {
+/// Render the packed files as one Markdown document: a file-tree header,
+/// an optional dependency map, then a language-tagged fenced block per file.
+pub fn render(root: &Path, files: &[PackedFile], dep_map: Option<&str>) -> String {
     let mut out = String::new();
     let root_name = root
         .canonicalize()
@@ -19,6 +19,10 @@ pub fn render(root: &Path, files: &[PackedFile]) -> String {
     out.push_str(&format!("# {root_name}\n\n## File tree\n\n```\n"));
     out.push_str(&tree(files));
     out.push_str("```\n");
+
+    if let Some(map) = dep_map.filter(|m| !m.is_empty()) {
+        out.push_str(&format!("\n## Dependency map\n\n```\n{map}```\n"));
+    }
 
     for file in files {
         let lang = language_tag(&file.rel_path);
@@ -165,7 +169,7 @@ mod tests {
             packed("src/main.py", "def main():\n    pass\n"),
             packed("README.md", "# Demo\n"),
         ];
-        let markdown = render(Path::new("demo"), &files);
+        let markdown = render(Path::new("demo"), &files, None);
         insta::assert_snapshot!(markdown);
     }
 }

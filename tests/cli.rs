@@ -177,3 +177,74 @@ fn nonexistent_path_fails_with_readable_error() {
         .failure()
         .stderr(predicate::str::contains("not a directory"));
 }
+
+#[test]
+fn related_depth_one_packs_direct_neighbors_only() {
+    let repo = setup();
+    contextcut()
+        .arg(repo.path())
+        .args(["--related", "src/chain_a.py", "--depth", "1"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("chain_a.py")
+                .and(predicate::str::contains("chain_b.py"))
+                .and(predicate::str::contains("leaf-marker-c").not())
+                .and(predicate::str::contains("standalone-island").not())
+                .and(predicate::str::contains("def main").not()),
+        );
+}
+
+#[test]
+fn related_depth_two_reaches_transitive_imports() {
+    let repo = setup();
+    contextcut()
+        .arg(repo.path())
+        .args(["--related", "src/chain_a.py"]) // default depth 2
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("leaf-marker-c")
+                .and(predicate::str::contains("standalone-island").not()),
+        );
+}
+
+#[test]
+fn related_seed_on_leaf_pulls_in_importers() {
+    let repo = setup();
+    contextcut()
+        .arg(repo.path())
+        .args(["--related", "src/chain_c.py", "--depth", "1"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("chain_b.py")
+                .and(predicate::str::contains("chain_a.py").not()),
+        );
+}
+
+#[test]
+fn related_unknown_seed_fails_with_readable_error() {
+    let repo = setup();
+    contextcut()
+        .arg(repo.path())
+        .args(["--related", "src/nope.py"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no packed file matches"));
+}
+
+#[test]
+fn map_section_shows_import_edges() {
+    let repo = setup();
+    contextcut()
+        .arg(repo.path())
+        .arg("--map")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("## Dependency map")
+                .and(predicate::str::contains("→ src/chain_b.py"))
+                .and(predicate::str::contains("← src/chain_a.py")),
+        );
+}

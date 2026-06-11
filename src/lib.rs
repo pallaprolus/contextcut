@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod deps;
 pub mod pruner;
 pub mod renderer;
 pub mod strip;
@@ -42,9 +43,40 @@ pub fn run(cli: &Cli) -> Result<()> {
             FileDecision::Skip(reason) => stats.count_skip(reason),
         }
     }
+    // Import graph: needed for --related filtering and the --map section.
+    let graph = if cli.map || !cli.related.is_empty() {
+        let entries: Vec<(std::path::PathBuf, String)> = packed
+            .iter()
+            .map(|f| (f.rel_path.clone(), f.content.clone()))
+            .collect();
+        Some(deps::Graph::build(&entries))
+    } else {
+        None
+    };
+
+    if !cli.related.is_empty() {
+        let graph = graph.as_ref().expect("graph built when --related is set");
+        let mut seeds = Vec::new();
+        for seed in &cli.related {
+            let rel = seed.strip_prefix(&cli.path).unwrap_or(seed).to_path_buf();
+            if !packed.iter().any(|f| f.rel_path == rel) {
+                bail!("--related {}: no packed file matches", rel.display());
+            }
+            seeds.push(rel);
+        }
+        let keep = graph.related(&seeds, cli.depth);
+        packed.retain(|f| keep.contains(&f.rel_path));
+    }
     stats.packed = packed.len();
 
-    let markdown = renderer::render(&cli.path, &packed);
+    let dep_map = if cli.map {
+        let rel_paths: Vec<_> = packed.iter().map(|f| f.rel_path.clone()).collect();
+        graph.as_ref().map(|g| g.map_section(&rel_paths))
+    } else {
+        None
+    };
+
+    let markdown = renderer::render(&cli.path, &packed, dep_map.as_deref());
     let estimate = tokens::estimate(&markdown);
 
     if !cli.tokens_only {
