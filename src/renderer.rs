@@ -53,7 +53,11 @@ fn tree(files: &[PackedFile]) -> String {
     let mut root = Node::default();
     for file in files {
         let mut node = &mut root;
-        let parts: Vec<_> = file.rel_path.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        let parts: Vec<_> = file
+            .rel_path
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
         for part in &parts[..parts.len() - 1] {
             node = node.dirs.entry(part.clone()).or_default();
         }
@@ -80,7 +84,10 @@ fn tree(files: &[PackedFile]) -> String {
 
 /// Map a path to a Markdown fence language tag; empty when unknown.
 fn language_tag(path: &Path) -> &'static str {
-    let name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_default();
     match name.as_ref() {
         "Dockerfile" => return "dockerfile",
         "Makefile" => return "makefile",

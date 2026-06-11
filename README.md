@@ -1,5 +1,7 @@
 # ContextCut
 
+[![CI](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml/badge.svg)](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml)
+
 **Pack a repository into ultra-dense, AI-optimized Markdown — with token estimates before you paste.**
 
 Feeding a whole repo to an LLM wastes thousands of tokens on vendor directories, lockfiles, caches, and binaries. ContextCut walks your project gitignore-aware, prunes the noise, and emits one clean Markdown document (file tree + language-tagged code blocks) ready for any chat or agent context window — and tells you what it will cost in tokens *before* you send it.

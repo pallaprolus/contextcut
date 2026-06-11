@@ -15,7 +15,11 @@ fn setup() -> TempDir {
     let tmp = tempfile::tempdir().unwrap();
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mini-repo");
     copy_tree(&src, tmp.path());
-    fs::rename(tmp.path().join("gitignore.txt"), tmp.path().join(".gitignore")).unwrap();
+    fs::rename(
+        tmp.path().join("gitignore.txt"),
+        tmp.path().join(".gitignore"),
+    )
+    .unwrap();
     fs::create_dir(tmp.path().join(".git")).unwrap();
     tmp
 }
@@ -116,9 +120,11 @@ fn exclude_glob_drops_matching_files() {
         .args(["--exclude", "**/*.md"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("mini-repo\n\n## File tree").not().or(
-            predicate::str::contains("Test fixture for contextcut").not(),
-        ));
+        .stdout(
+            predicate::str::contains("mini-repo\n\n## File tree")
+                .not()
+                .or(predicate::str::contains("Test fixture for contextcut").not()),
+        );
 }
 
 #[test]
@@ -130,7 +136,9 @@ fn oversize_files_get_truncation_marker() {
         .args(["--max-file-size", "1kb"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("... [truncated: 1024 of 2400 bytes]"));
+        .stdout(predicate::str::contains(
+            "... [truncated: 1024 of 2400 bytes]",
+        ));
 }
 
 #[test]

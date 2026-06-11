@@ -49,8 +49,9 @@ pub fn run(cli: &Cli) -> Result<()> {
 
     if !cli.tokens_only {
         match &cli.output {
-            Some(file) => fs::write(file, &markdown)
-                .with_context(|| format!("writing {}", file.display()))?,
+            Some(file) => {
+                fs::write(file, &markdown).with_context(|| format!("writing {}", file.display()))?
+            }
             None => {
                 // Locked stdout write; ignore EPIPE-style failures gracefully.
                 let mut out = std::io::stdout().lock();

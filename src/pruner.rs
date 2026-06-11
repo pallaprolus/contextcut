@@ -53,13 +53,15 @@ impl Filters {
 
     fn passes(&self, rel: &Path) -> bool {
         if let Some(inc) = &self.include
-            && !inc.is_match(rel) {
-                return false;
-            }
+            && !inc.is_match(rel)
+        {
+            return false;
+        }
         if let Some(exc) = &self.exclude
-            && exc.is_match(rel) {
-                return false;
-            }
+            && exc.is_match(rel)
+        {
+            return false;
+        }
         true
     }
 }
@@ -77,7 +79,10 @@ fn build_globset(patterns: &[String]) -> Result<Option<GlobSet>> {
 
 /// Decide whether a file is packed, truncated, or skipped.
 pub fn decide(path: &Path, rel: &Path, filters: &Filters, max_bytes: u64) -> FileDecision {
-    let name = rel.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+    let name = rel
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_default();
 
     if LOCKFILES.iter().any(|l| *l == name) {
         return FileDecision::Skip(SkipReason::Lockfile);

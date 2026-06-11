@@ -72,7 +72,10 @@ mod tests {
 
     #[test]
     fn claude_factor_applied() {
-        let est = Estimate { o200k: 0, cl100k: 100 };
+        let est = Estimate {
+            o200k: 0,
+            cl100k: 100,
+        };
         assert_eq!(est.claude_approx(), 115);
     }
 
