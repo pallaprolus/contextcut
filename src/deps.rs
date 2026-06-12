@@ -158,6 +158,7 @@ fn resolve_py_module(
         bases.push(base);
     } else {
         bases.push(PathBuf::new()); // repo root
+        bases.push(PathBuf::from("src")); // src/ layout (absolute imports)
         bases.push(source_dir.to_path_buf()); // sibling modules
     }
 
@@ -401,6 +402,17 @@ mod tests {
         ]);
         assert!(edge(&g, "main.py", "pkg/__init__.py"));
         assert!(edge(&g, "main.py", "pkg/mod.py"));
+    }
+
+    #[test]
+    fn python_src_layout_absolute_imports() {
+        // Modern src/ layout: tests import the package absolutely.
+        let g = graph(&[
+            ("src/pkg/client.py", ""),
+            ("src/pkg/__init__.py", ""),
+            ("tests/test_client.py", "from pkg.client import Document\n"),
+        ]);
+        assert!(edge(&g, "tests/test_client.py", "src/pkg/client.py"));
     }
 
     #[test]
