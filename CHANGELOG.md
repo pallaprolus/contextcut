@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-06-11
+
+### Fixed
+- Python import resolution now handles the `src/` layout: absolute imports
+  like `from pkg.client import X` resolve to `src/pkg/client.py`, so
+  test→code edges appear in src-layout projects. Found dogfooding on a
+  real MCP server repo.
+
 ## 0.2.0 — 2026-06-11
 
 ### Added

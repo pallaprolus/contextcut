@@ -1,6 +1,6 @@
 [package]
 name = "contextcut"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Pack a repository into ultra-dense, AI-optimized Markdown — gitignore-aware, noise-pruned, with token estimates"
 license = "MIT"
