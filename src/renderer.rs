@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+#[derive(Clone)]
 pub struct PackedFile {
     pub rel_path: PathBuf,
     pub content: String,
@@ -37,7 +38,7 @@ pub fn render(root: &Path, files: &[PackedFile], dep_map: Option<&str>) -> Strin
 }
 
 /// A fence longer than any backtick run in the content, minimum ```.
-fn fence_for(content: &str) -> String {
+pub(crate) fn fence_for(content: &str) -> String {
     let longest_run = content
         .lines()
         .map(|l| l.chars().take_while(|c| *c == '`').count())

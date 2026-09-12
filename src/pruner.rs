@@ -79,33 +79,48 @@ fn build_globset(patterns: &[String]) -> Result<Option<GlobSet>> {
 
 /// Decide whether a file is packed, truncated, or skipped.
 pub fn decide(path: &Path, rel: &Path, filters: &Filters, max_bytes: u64) -> FileDecision {
+    if let Some(reason) = skip_path(rel, filters) {
+        return FileDecision::Skip(reason);
+    }
+    let Ok(bytes) = fs::read(path) else {
+        return FileDecision::Skip(SkipReason::Unreadable);
+    };
+    decide_bytes(&bytes, rel, filters, max_bytes)
+}
+
+/// Apply the same pruning to historical content of deleted files.
+pub fn decide_bytes(bytes: &[u8], rel: &Path, filters: &Filters, max_bytes: u64) -> FileDecision {
+    if let Some(reason) = skip_path(rel, filters) {
+        return FileDecision::Skip(reason);
+    }
+    if inspect(&bytes[..bytes.len().min(1024)]) == ContentType::BINARY {
+        return FileDecision::Skip(SkipReason::Binary);
+    }
+
+    let content = String::from_utf8_lossy(bytes);
+    if (content.len() as u64) > max_bytes {
+        return FileDecision::Truncated(truncate(&content, max_bytes as usize));
+    }
+    FileDecision::Keep(content.into_owned())
+}
+
+fn skip_path(rel: &Path, filters: &Filters) -> Option<SkipReason> {
     let name = rel
         .file_name()
         .map(|n| n.to_string_lossy())
         .unwrap_or_default();
 
     if LOCKFILES.iter().any(|l| *l == name) {
-        return FileDecision::Skip(SkipReason::Lockfile);
+        return Some(SkipReason::Lockfile);
     }
     if is_minified(&name) {
-        return FileDecision::Skip(SkipReason::Minified);
+        return Some(SkipReason::Minified);
     }
     if !filters.passes(rel) {
-        return FileDecision::Skip(SkipReason::Filtered);
+        return Some(SkipReason::Filtered);
     }
 
-    let Ok(bytes) = fs::read(path) else {
-        return FileDecision::Skip(SkipReason::Unreadable);
-    };
-    if inspect(&bytes[..bytes.len().min(1024)]) == ContentType::BINARY {
-        return FileDecision::Skip(SkipReason::Binary);
-    }
-
-    let content = String::from_utf8_lossy(&bytes);
-    if (content.len() as u64) > max_bytes {
-        return FileDecision::Truncated(truncate(&content, max_bytes as usize));
-    }
-    FileDecision::Keep(content.into_owned())
+    None
 }
 
 fn is_minified(name: &str) -> bool {

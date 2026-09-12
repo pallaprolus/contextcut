@@ -43,9 +43,13 @@ impl Graph {
     /// Files reachable from `seeds` within `depth` hops, following both
     /// imports (what a seed needs) and importers (what needs the seed).
     pub fn related(&self, seeds: &[PathBuf], depth: usize) -> BTreeSet<PathBuf> {
-        let mut seen: BTreeSet<PathBuf> = seeds.iter().cloned().collect();
-        let mut queue: VecDeque<(PathBuf, usize)> = seeds.iter().map(|s| (s.clone(), 0)).collect();
+        self.distances(seeds, depth).into_keys().collect()
+    }
 
+    /// Shortest import-graph distance, used to prioritize context under a budget.
+    pub fn distances(&self, seeds: &[PathBuf], depth: usize) -> BTreeMap<PathBuf, usize> {
+        let mut seen: BTreeMap<PathBuf, usize> = seeds.iter().map(|s| (s.clone(), 0)).collect();
+        let mut queue: VecDeque<(PathBuf, usize)> = seeds.iter().map(|s| (s.clone(), 0)).collect();
         while let Some((file, d)) = queue.pop_front() {
             if d >= depth {
                 continue;
@@ -57,7 +61,8 @@ impl Graph {
                 .chain(self.reverse.get(&file))
                 .flatten();
             for n in neighbors {
-                if seen.insert(n.clone()) {
+                if !seen.contains_key(n) {
+                    seen.insert(n.clone(), d + 1);
                     queue.push_back((n.clone(), d + 1));
                 }
             }

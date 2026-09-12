@@ -2,9 +2,38 @@
 
 [![CI](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml/badge.svg)](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/contextcut.svg)](https://crates.io/crates/contextcut)
 
-**Pack a repository into ultra-dense, AI-optimized Markdown — with token estimates before you paste.**
+**Get the code you need into an AI conversation in one command.**
 
-Feeding a whole repo to an LLM wastes thousands of tokens on vendor directories, lockfiles, caches, and binaries. ContextCut walks your project gitignore-aware, prunes the noise, and emits one clean Markdown document (file tree + language-tagged code blocks) ready for any chat or agent context window — and tells you what it will cost in tokens *before* you send it.
+ContextCut prepares a change review with the actual Git patch, changed files, and nearby code and tests found through imports. It fits the result into a token budget and can copy it straight to your clipboard. It also packs whole repositories or selected modules as Markdown, pruning ignored files, binaries, lockfiles, and vendor directories.
+
+### Review a change
+
+```bash
+# Uncommitted work, including staged changes and untracked additions:
+contextcut review --copy
+
+# Compare main directly with your working tree:
+contextcut review --base main --budget 20k --copy
+
+# Save a review packet, or preview its token usage:
+contextcut review -o review.md
+contextcut review --tokens-only
+```
+
+Paste the result into your AI chat. Review mode includes a review instruction, the patch, an import map, and a list explaining why each file was included. Deleted files are labeled as base revision content; untracked additions appear as current file bodies. Only changes that pass the normal pruning and filters enter the packet.
+
+The default review budget is **20,000 o200k_base tokens**, including the patch and all Markdown metadata. Changed file bodies (subject to `--max-file-size`) and the complete eligible patch are required. Nearest import neighbors are added first, with path order breaking ties; oversized optional files are skipped so smaller ones can still fit. If required content exceeds the budget, ContextCut fails before writing or copying and asks for a larger budget or narrower selection. Other models can count differently.
+
+`--base` defaults to `HEAD`. Comparison is directly against that revision, **not the branch merge base**. For branch-only changes after branches diverge, pass `--base "$(git merge-base main HEAD)"`. Import extraction is heuristic: connected tests may be found, but this does not guarantee every affected file or test is included.
+
+### Pack a module or repository
+
+```bash
+contextcut . --related src/api.py --depth 1 --budget 10k --copy
+contextcut ~/code/my-project -o packed.md
+```
+
+Without `review`, the existing packing behavior and stdout piping remain available. `--budget` is optional; when set, explicitly selected/changed files are required and other candidate files are added while they fit. For whole-repository packing without seeds, candidates are considered in path order.
 
 ```console
 $ contextcut ~/code/my-project -o packed.md
@@ -23,23 +52,32 @@ Real-world result: a 2,240-file / 38 MB Python repo → 114 files / 0.4 MB of si
 
 ```bash
 cargo install contextcut
-# (Homebrew tap planned)
+
+# Install the improvements from this checkout before the next published release:
+cargo install --path . --locked
 ```
+
+The new review, budget, and clipboard features are currently in this checkout; they are not yet a published crates.io release.
+
+`--copy` uses `pbcopy` on macOS, PowerShell on Windows, and `wl-copy`, `xclip`, or `xsel` on Linux. On a headless machine or if no clipboard helper is available, use `-o packed.md`. `--copy -o packed.md` both saves and copies; the saved file remains available if copying fails. `--copy` cannot be combined with `--tokens-only`.
 
 ## Usage
 
 ```bash
 contextcut [PATH] [OPTIONS]
+contextcut review [PATH] [--base REF] [OPTIONS]
 ```
 
 | Flag | Default | Effect |
 |---|---|---|
+| `--copy` | off | Copy Markdown to the clipboard; suppress Markdown on stdout |
+| `--budget <N>` | unlimited; `20k` for review | Cap complete output using o200k_base; accepts `20000` or `20k` |
 | `PATH` | `.` | Root directory to pack |
 | `-o, --output <FILE>` | stdout | Write Markdown to a file (the stats table always goes to stderr, so stdout stays pipeable) |
 | `--related <PATH>` | — | Pack only files related to PATH in the import graph (repeatable): its imports *and* its importers |
 | `--diff [REF]` | — | Pack files changed vs REF (default `HEAD`) plus untracked files, with their import blast radius |
 | `--depth <N>` | `2` | Hops to follow in the import graph for `--related`/`--diff` |
-| `--map` | off | Append a dependency map section (`→` imports, `←` importers) to the output |
+| `--map` | off; on for review | Append a dependency map section (`→` imports, `←` importers) to the output |
 | `--exact-claude` | off | Exact Claude count via Anthropic's count-tokens API (needs `ANTHROPIC_API_KEY`; falls back to the approximation on any error) |
 | `--tokens-only` | off | Dry run: stats + token table only, no Markdown |
 | `--strip-comments` | off | Drop full-line comments (py, rs, js/ts, go, c/cpp, java, sh, yaml/toml) |
@@ -81,7 +119,7 @@ No flags needed — this is the product's opinion:
 - **Gemini is an approximation** — we reuse the `o200k_base` count as a nearby proxy, labeled "approx".
 - Special tokens (a literal `<|endoftext|>` in source) are counted as plain text, never as control tokens.
 
-## Known limitations (v0.1)
+## Known limitations
 
 - `--strip-comments` is line-based: it removes *full-line* comments only and leaves inline trailing comments. Rare multi-line strings whose lines begin with `#`/`//` could be affected. A tree-sitter-based stripper is planned for v0.2.
 - Non-UTF-8 text files are lossy-converted (`U+FFFD` replacement) rather than skipped.
@@ -89,9 +127,10 @@ No flags needed — this is the product's opinion:
 
 ## Roadmap
 
+- **Distribution**: Homebrew tap and published prebuilt binaries
 - **v0.3 — tree-sitter comment stripping**: replaces the line-based stripper
 - **v0.3 — architecture overview mode**: `--map` without file bodies
-- Homebrew tap; Gemini count-tokens API
+- Gemini count-tokens API
 
 ## Development
 

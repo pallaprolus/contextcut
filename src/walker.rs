@@ -52,6 +52,47 @@ pub fn walk(root: &Path, no_gitignore: bool) -> Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
+/// Match a deleted path against current ignore rules without restoring it.
+pub fn allows_deleted(root: &Path, rel: &Path, no_gitignore: bool) -> Result<bool> {
+    if rel.components().any(|part| {
+        let name = part.as_os_str().to_string_lossy();
+        VENDOR_DIRS.contains(&name.as_ref()) || name.ends_with(".egg-info")
+    }) {
+        return Ok(false);
+    }
+    if no_gitignore {
+        return Ok(true);
+    }
+    if crate::diff::is_ignored(root, rel)? {
+        return Ok(false);
+    }
+    // Git handles .gitignore/global/exclude; the walker also supports .ignore.
+    let full = root.canonicalize()?.join(rel);
+    let mut ignored = false;
+    let mut ancestors: Vec<_> = full
+        .parent()
+        .into_iter()
+        .flat_map(|p| p.ancestors())
+        .collect();
+    ancestors.reverse();
+    for dir in ancestors {
+        let file = dir.join(".ignore");
+        if file.is_file() {
+            let mut builder = ignore::gitignore::GitignoreBuilder::new(dir);
+            if let Some(err) = builder.add(file) {
+                return Err(err.into());
+            }
+            let rules = builder.build()?;
+            match rules.matched_path_or_any_parents(&full, false) {
+                ignore::Match::Ignore(_) => ignored = true,
+                ignore::Match::Whitelist(_) => ignored = false,
+                ignore::Match::None => {}
+            }
+        }
+    }
+    Ok(!ignored)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

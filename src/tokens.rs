@@ -1,4 +1,5 @@
-use tiktoken_rs::{cl100k_base, o200k_base};
+use std::sync::OnceLock;
+use tiktoken_rs::{CoreBPE, cl100k_base, o200k_base};
 
 /// Claude has no public tokenizer; on code, Claude counts run ~10–25%
 /// above cl100k_base empirically. We use ×1.15 and label it "approx".
@@ -35,12 +36,21 @@ impl Estimate {
 /// `encode_ordinary` treats special tokens (e.g. a literal
 /// "<|endoftext|>" in source code) as plain text instead of erroring.
 pub fn estimate(text: &str) -> Estimate {
-    let o200k = o200k_base().expect("bundled o200k BPE data");
-    let cl100k = cl100k_base().expect("bundled cl100k BPE data");
+    static CL100K: OnceLock<CoreBPE> = OnceLock::new();
+    let cl100k = CL100K.get_or_init(|| cl100k_base().expect("bundled cl100k BPE data"));
     Estimate {
-        o200k: o200k.encode_ordinary(text).len(),
+        o200k: count_budget(text),
         cl100k: cl100k.encode_ordinary(text).len(),
     }
+}
+
+/// Local, deterministic encoding used by --budget; includes all rendered metadata.
+pub fn count_budget(text: &str) -> usize {
+    static O200K: OnceLock<CoreBPE> = OnceLock::new();
+    O200K
+        .get_or_init(|| o200k_base().expect("bundled o200k BPE data"))
+        .encode_ordinary(text)
+        .len()
 }
 
 /// 1234567 → "1,234,567"

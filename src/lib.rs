@@ -1,9 +1,12 @@
 pub mod cli;
+pub mod clipboard;
 pub mod deps;
 pub mod diff;
 pub mod exact;
 pub mod pruner;
 pub mod renderer;
+pub mod review;
+pub mod selection;
 pub mod strip;
 pub mod tokens;
 pub mod walker;
@@ -18,18 +21,32 @@ use pruner::{FileDecision, SkipReason};
 
 /// Run the full pack pipeline: walk → prune → (strip) → render → count → emit.
 pub fn run(cli: &Cli) -> Result<()> {
-    if !cli.path.is_dir() {
-        bail!("{} is not a directory", cli.path.display());
+    let root = cli.root();
+    if cli.is_review() && cli.path != std::path::Path::new(".") {
+        bail!("put the repository path after the command: contextcut review <PATH>");
+    }
+    if cli.is_review() && (cli.diff.is_some() || !cli.related.is_empty()) {
+        bail!("review uses --base; --diff and --related are for the pack command");
+    }
+    if !root.is_dir() {
+        bail!("{} is not a directory", root.display());
     }
 
-    let paths = walker::walk(&cli.path, cli.no_gitignore)?;
+    let paths = walker::walk(root, cli.no_gitignore)?;
     let filters = pruner::Filters::new(&cli.include, &cli.exclude)?;
 
     let mut packed: Vec<renderer::PackedFile> = Vec::new();
     let mut stats = Stats::default();
 
+    let output_path = cli.output.as_ref().and_then(|p| p.canonicalize().ok());
     for path in &paths {
-        let rel = path.strip_prefix(&cli.path).unwrap_or(path);
+        if output_path
+            .as_ref()
+            .is_some_and(|out| path.canonicalize().ok().as_ref() == Some(out))
+        {
+            continue;
+        }
+        let rel = path.strip_prefix(root).unwrap_or(path);
         match pruner::decide(path, rel, &filters, cli.max_file_size) {
             FileDecision::Keep(content) | FileDecision::Truncated(content) => {
                 let content = if cli.strip_comments {
@@ -45,8 +62,13 @@ pub fn run(cli: &Cli) -> Result<()> {
             FileDecision::Skip(reason) => stats.count_skip(reason),
         }
     }
+    let review = if cli.is_review() {
+        Some(review::Review::prepare(cli, &mut packed, &filters)?)
+    } else {
+        None
+    };
     // Import graph: needed for --related/--diff filtering and --map.
-    let graph = if cli.map || !cli.related.is_empty() || cli.diff.is_some() {
+    let graph = if cli.map || !cli.related.is_empty() || cli.reference().is_some() {
         let entries: Vec<(std::path::PathBuf, String)> = packed
             .iter()
             .map(|f| (f.rel_path.clone(), f.content.clone()))
@@ -58,16 +80,19 @@ pub fn run(cli: &Cli) -> Result<()> {
 
     let mut seeds = Vec::new();
     for seed in &cli.related {
-        let rel = seed.strip_prefix(&cli.path).unwrap_or(seed).to_path_buf();
+        let rel = seed.strip_prefix(root).unwrap_or(seed).to_path_buf();
         if !packed.iter().any(|f| f.rel_path == rel) {
             bail!("--related {}: no packed file matches", rel.display());
         }
         seeds.push(rel);
     }
-    if let Some(reference) = &cli.diff {
-        // Changed files that were pruned (binaries, gitignored) are skipped,
-        // not errors — only packable changes seed the blast radius.
-        let changed = diff::changed_files(&cli.path, reference)?;
+    if let Some(review) = &review {
+        if review.changed.is_empty() {
+            bail!("no packable changed files; use --base <revision> to review committed changes");
+        }
+        seeds.extend(review.changed.iter().cloned());
+    } else if let Some(reference) = &cli.diff {
+        let changed = diff::changed_files(root, reference)?;
         let packable: Vec<_> = changed
             .into_iter()
             .filter(|c| packed.iter().any(|f| f.rel_path == *c))
@@ -77,21 +102,23 @@ pub fn run(cli: &Cli) -> Result<()> {
         }
         seeds.extend(packable);
     }
+    let distances = graph
+        .as_ref()
+        .map(|g| g.distances(&seeds, cli.depth))
+        .unwrap_or_default();
     if !seeds.is_empty() {
-        let graph = graph.as_ref().expect("graph built when seeds exist");
-        let keep = graph.related(&seeds, cli.depth);
-        packed.retain(|f| keep.contains(&f.rel_path));
+        packed.retain(|f| distances.contains_key(&f.rel_path));
     }
-    stats.packed = packed.len();
-
-    let dep_map = if cli.map {
-        let rel_paths: Vec<_> = packed.iter().map(|f| f.rel_path.clone()).collect();
-        graph.as_ref().map(|g| g.map_section(&rel_paths))
-    } else {
-        None
+    let selection = selection::Selection {
+        root,
+        graph: graph.as_ref(),
+        map: cli.map || cli.is_review(),
+        distances,
+        review: review.as_ref(),
+        budget: cli.token_budget(),
     };
-
-    let markdown = renderer::render(&cli.path, &packed, dep_map.as_deref());
+    let (markdown, count, omitted) = selection.fit(packed)?;
+    stats.packed = count;
     let estimate = tokens::estimate(&markdown);
     let exact_claude = if cli.exact_claude {
         match exact::count(&markdown) {
@@ -112,12 +139,24 @@ pub fn run(cli: &Cli) -> Result<()> {
             Some(file) => {
                 fs::write(file, &markdown).with_context(|| format!("writing {}", file.display()))?
             }
+            None if cli.copy => {}
             None => {
                 // Locked stdout write; ignore EPIPE-style failures gracefully.
                 let mut out = std::io::stdout().lock();
                 let _ = out.write_all(markdown.as_bytes());
             }
         }
+        if cli.copy {
+            clipboard::copy(&markdown)?;
+            eprintln!("  Copied review/context to clipboard. Paste it into your AI chat.");
+        }
+    }
+    if cli.token_budget().is_some() {
+        eprintln!(
+            "  Budget: {} / {} o200k_base tokens; {omitted} files omitted",
+            estimate.o200k,
+            cli.token_budget().unwrap()
+        );
     }
 
     eprintln!("{}", stats.summary(markdown.len()));
