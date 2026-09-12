@@ -49,7 +49,10 @@ def package(binary, target, out):
     else:
         with tarfile.open(destination, "w:gz") as archive:
             for source, name in entries:
-                archive.add(source, arcname=name, recursive=False)
+                info = archive.gettarinfo(source, arcname=name)
+                info.mode = 0o755 if name == executable else 0o644
+                with source.open("rb") as content:
+                    archive.addfile(info, content)
     print(destination)
 
 

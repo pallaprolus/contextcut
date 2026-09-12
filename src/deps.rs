@@ -89,12 +89,12 @@ impl Graph {
             if deps.is_empty() && users.is_empty() {
                 continue;
             }
-            out.push_str(&format!("{}\n", file.display()));
+            out.push_str(&format!("{}\n", crate::renderer::display_path(file)));
             for d in deps {
-                out.push_str(&format!("  → {}\n", d.display()));
+                out.push_str(&format!("  → {}\n", crate::renderer::display_path(d)));
             }
             for u in users {
-                out.push_str(&format!("  ← {}\n", u.display()));
+                out.push_str(&format!("  ← {}\n", crate::renderer::display_path(u)));
             }
         }
         out

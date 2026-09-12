@@ -47,14 +47,17 @@ impl Selection<'_> {
                         None => "repository context".into(),
                     }
                 };
-                out.push_str(&format!("- {} — {reason}\n", path.display()));
+                out.push_str(&format!(
+                    "- {} — {reason}\n",
+                    crate::renderer::display_path(path)
+                ));
             }
             out.push_str(&format!(
                 "\n{} related/candidate files omitted to fit the budget.\n",
                 omitted.len()
             ));
             for path in omitted.iter().take(20) {
-                out.push_str(&format!("- {}\n", path.display()));
+                out.push_str(&format!("- {}\n", crate::renderer::display_path(path)));
             }
             if omitted.len() > 20 {
                 out.push_str("- (remaining omitted paths not listed)\n");

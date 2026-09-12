@@ -30,11 +30,19 @@ pub fn render(root: &Path, files: &[PackedFile], dep_map: Option<&str>) -> Strin
         let fence = fence_for(&file.content);
         out.push_str(&format!(
             "\n## {}\n\n{fence}{lang}\n{}\n{fence}\n",
-            file.rel_path.display(),
+            display_path(&file.rel_path),
             file.content.trim_end_matches('\n')
         ));
     }
     out
+}
+
+/// Repository paths use forward slashes in Markdown on every platform.
+pub(crate) fn display_path(path: &Path) -> String {
+    path.iter()
+        .map(|part| part.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// A fence longer than any backtick run in the content, minimum ```.
