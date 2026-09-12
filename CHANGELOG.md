@@ -1,13 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-09-12
 
 ### Added
+- Prebuilt macOS (Apple Silicon/Intel), Linux (ARM64/x86-64 musl), and Windows (x86-64) archives with SHA-256 checksums and per-platform smoke tests.
+- Homebrew installation through `pallaprolus/tap/contextcut`, using the prebuilt archives.
+- A tag-triggered workflow that prepares draft GitHub releases and generates the Homebrew formula from actual archive hashes.
 - `contextcut review [PATH] --base REF`: an AI review packet containing the actual patch, changed file bodies, an import map, and inclusion reasons. Includes staged changes, untracked additions, and deleted file context.
 - `--budget 20k`: fit complete rendered output to an o200k_base token budget. Review defaults to 20k; selected/changed files and the patch remain required. Report omitted context and fail before output if required content does not fit.
 - `--copy`: clipboard delivery on macOS, Windows, Wayland, and X11, with file-output guidance when unavailable.
 
 ### Fixed
+- Explicit Cargo package allowlist excludes local launch drafts and development metadata.
 - Do not include a previous output file when regenerating it.
 - Parse Git filenames with NUL delimiters and resolve revisions before using them; keep diffs within the selected directory and disable external diff/text conversion commands.
 - Reuse local tokenizers across repeated budget checks.

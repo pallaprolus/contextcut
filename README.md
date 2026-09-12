@@ -50,14 +50,44 @@ Real-world result: a 2,240-file / 38 MB Python repo → 114 files / 0.4 MB of si
 
 ## Install
 
-```bash
-cargo install contextcut
+Install on macOS or Linux with Homebrew; no Rust compiler is needed:
 
-# Install the improvements from this checkout before the next published release:
+```bash
+brew install pallaprolus/tap/contextcut
+```
+
+Or download a [prebuilt binary](https://github.com/pallaprolus/contextcut/releases/latest):
+
+| Platform | Archive target |
+|---|---|
+| macOS Apple Silicon (11+) | `aarch64-apple-darwin` |
+| macOS Intel (11+) | `x86_64-apple-darwin` |
+| Linux ARM64 | `aarch64-unknown-linux-musl` |
+| Linux x86-64 | `x86_64-unknown-linux-musl` |
+| Windows x86-64 | `x86_64-pc-windows-msvc` |
+
+Archives are named `contextcut-<version>-<target>.tar.gz` (`.zip` on Windows). Compare the archive's SHA-256 with the release's `SHA256SUMS`, extract it, and put `contextcut` (or `contextcut.exe`) on your PATH. Linux binaries use musl and do not require glibc. Git must be installed for `review` and `--diff`.
+
+For example, after downloading the macOS Apple Silicon archive and checksum file:
+
+```bash
+shasum -a 256 contextcut-0.3.0-aarch64-apple-darwin.tar.gz
+# Compare with its entry in SHA256SUMS, then extract:
+tar -xzf contextcut-0.3.0-aarch64-apple-darwin.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 755 contextcut "$HOME/.local/bin/contextcut"
+# Add $HOME/.local/bin to your shell's PATH if it is not already there.
+```
+
+To build the same version with Rust:
+
+```bash
+cargo install --git https://github.com/pallaprolus/contextcut --tag v0.3.0 --locked
+# Or from a checkout:
 cargo install --path . --locked
 ```
 
-The new review, budget, and clipboard features are currently in this checkout; they are not yet a published crates.io release.
+The existing crates.io release is v0.2.1; `cargo install contextcut` does not yet include the newer review, budget, and clipboard features. GitHub binaries and Homebrew provide v0.3.0.
 
 `--copy` uses `pbcopy` on macOS, PowerShell on Windows, and `wl-copy`, `xclip`, or `xsel` on Linux. On a headless machine or if no clipboard helper is available, use `-o packed.md`. `--copy -o packed.md` both saves and copies; the saved file remains available if copying fails. `--copy` cannot be combined with `--tokens-only`.
 
@@ -114,25 +144,26 @@ No flags needed — this is the product's opinion:
 
 ## Token estimates: how they're computed
 
-- **GPT counts are exact** — real BPE via [`tiktoken-rs`](https://crates.io/crates/tiktoken-rs) (`o200k_base` for GPT-4o/5-class, `cl100k_base` for GPT-4). Verified byte-identical against Python `tiktoken`.
+- **Local tokenizer counts are exact for the named encodings** — real BPE via [`tiktoken-rs`](https://crates.io/crates/tiktoken-rs) (`o200k_base` and `cl100k_base`). These count the generated Markdown, not a complete API request or every model’s billing tokens. Verified against Python `tiktoken`.
 - **Claude is exact with `--exact-claude`** — Anthropic publishes no local tokenizer, but their count-tokens API returns exact numbers (free to call; set `ANTHROPIC_API_KEY`). Without the flag (or on any API error) we report `cl100k × 1.15` as a rough budgeting factor, labeled "approx".
 - **Gemini is an approximation** — we reuse the `o200k_base` count as a nearby proxy, labeled "approx".
 - Special tokens (a literal `<|endoftext|>` in source) are counted as plain text, never as control tokens.
 
 ## Known limitations
 
-- `--strip-comments` is line-based: it removes *full-line* comments only and leaves inline trailing comments. Rare multi-line strings whose lines begin with `#`/`//` could be affected. A tree-sitter-based stripper is planned for v0.2.
+- `--strip-comments` is line-based: it removes *full-line* comments only and leaves inline trailing comments. Rare multi-line strings whose lines begin with `#`/`//` could be affected. A tree-sitter-based stripper is planned.
 - Non-UTF-8 text files are lossy-converted (`U+FFFD` replacement) rather than skipped.
 - Claude/Gemini counts are estimates — treat them as budgeting guidance, not billing truth.
 
 ## Roadmap
 
-- **Distribution**: Homebrew tap and published prebuilt binaries
-- **v0.3 — tree-sitter comment stripping**: replaces the line-based stripper
-- **v0.3 — architecture overview mode**: `--map` without file bodies
+- **Tree-sitter comment stripping**: replaces the line-based stripper
+- **Architecture overview mode**: `--map` without file bodies
 - Gemini count-tokens API
 
 ## Development
+
+See [distribution maintenance](docs/DISTRIBUTION.md) for binary packaging, checksums, and Homebrew updates.
 
 ```bash
 cargo test            # unit + fixture-based integration + insta snapshot tests

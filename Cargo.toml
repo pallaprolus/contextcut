@@ -1,12 +1,13 @@
 [package]
 name = "contextcut"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
-description = "Pack a repository into ultra-dense, AI-optimized Markdown — gitignore-aware, noise-pruned, with token estimates"
+description = "Prepare focused repository context and budgeted change reviews for AI chats"
 license = "MIT"
 repository = "https://github.com/pallaprolus/contextcut"
 keywords = ["llm", "ai", "context", "cli", "markdown"]
 categories = ["command-line-utilities", "development-tools"]
+include = ["src/**", "tests/**", "Cargo.toml", "Cargo.lock", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [dependencies]
 anyhow = "1"
