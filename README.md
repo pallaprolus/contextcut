@@ -1,6 +1,6 @@
 # ContextCut
 
-[![CI](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml/badge.svg)](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/contextcut.svg)](https://crates.io/crates/contextcut)
+[![CI](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml/badge.svg)](https://github.com/pallaprolus/contextcut/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/contextcut.svg)](https://crates.io/crates/contextcut) [![Downloads](https://img.shields.io/crates/d/contextcut.svg)](https://crates.io/crates/contextcut) [![GitHub release](https://img.shields.io/github/v/release/pallaprolus/contextcut)](https://github.com/pallaprolus/contextcut/releases/latest) [![Homebrew](https://img.shields.io/badge/homebrew-pallaprolus%2Ftap-orange)](https://github.com/pallaprolus/homebrew-tap) [![License: MIT](https://img.shields.io/crates/l/contextcut.svg)](LICENSE)
 
 **Get the code you need into an AI conversation in one command.**
 
