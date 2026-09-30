@@ -12,7 +12,7 @@ pub mod tokens;
 pub mod walker;
 
 use std::fs;
-use std::io::Write;
+use std::io::{self, Write};
 
 use anyhow::{Context, Result, bail};
 
@@ -32,14 +32,15 @@ pub fn run(cli: &Cli) -> Result<()> {
         bail!("{} is not a directory", root.display());
     }
 
-    let paths = walker::walk(root, cli.no_gitignore)?;
+    let walk = walker::walk(root, cli.no_gitignore)?;
     let filters = pruner::Filters::new(&cli.include, &cli.exclude)?;
 
     let mut packed: Vec<renderer::PackedFile> = Vec::new();
     let mut stats = Stats::default();
 
     let output_path = cli.output.as_ref().and_then(|p| p.canonicalize().ok());
-    for path in &paths {
+    stats.ignored = walk.unreadable;
+    for path in &walk.paths {
         if output_path
             .as_ref()
             .is_some_and(|out| path.canonicalize().ok().as_ref() == Some(out))
@@ -141,9 +142,8 @@ pub fn run(cli: &Cli) -> Result<()> {
             }
             None if cli.copy => {}
             None => {
-                // Locked stdout write; ignore EPIPE-style failures gracefully.
                 let mut out = std::io::stdout().lock();
-                let _ = out.write_all(markdown.as_bytes());
+                write_stdout(&mut out, markdown.as_bytes()).context("writing stdout")?;
             }
         }
         if cli.copy {
@@ -162,6 +162,13 @@ pub fn run(cli: &Cli) -> Result<()> {
     eprintln!("{}", stats.summary(markdown.len()));
     eprintln!("{}", estimate.table(exact_claude));
     Ok(())
+}
+
+fn write_stdout(out: &mut impl Write, bytes: &[u8]) -> io::Result<()> {
+    match out.write_all(bytes).and_then(|()| out.flush()) {
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        result => result,
+    }
 }
 
 /// Counters for the stderr summary line.
@@ -204,5 +211,64 @@ fn human_bytes(n: usize) -> String {
         format!("{:.1} KB", n as f64 / 1024.0)
     } else {
         format!("{n} B")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestWriter {
+        write_error: Option<io::ErrorKind>,
+        flush_error: Option<io::ErrorKind>,
+        flushed: bool,
+    }
+
+    impl Write for TestWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if let Some(kind) = self.write_error {
+                return Err(io::Error::from(kind));
+            }
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushed = true;
+            self.flush_error.map_or(Ok(()), |kind| Err(kind.into()))
+        }
+    }
+
+    #[test]
+    fn stdout_propagates_write_and_flush_errors() {
+        let mut writer = TestWriter {
+            write_error: Some(io::ErrorKind::PermissionDenied),
+            flush_error: None,
+            flushed: false,
+        };
+        assert_eq!(
+            write_stdout(&mut writer, b"hello").unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+
+        writer.write_error = None;
+        writer.flush_error = Some(io::ErrorKind::OutOfMemory);
+        assert_eq!(
+            write_stdout(&mut writer, b"hello").unwrap_err().kind(),
+            io::ErrorKind::OutOfMemory
+        );
+        assert!(writer.flushed);
+    }
+
+    #[test]
+    fn stdout_ignores_only_broken_pipe() {
+        let mut writer = TestWriter {
+            write_error: Some(io::ErrorKind::BrokenPipe),
+            flush_error: None,
+            flushed: false,
+        };
+        write_stdout(&mut writer, b"hello").unwrap();
+        writer.write_error = None;
+        writer.flush_error = Some(io::ErrorKind::BrokenPipe);
+        write_stdout(&mut writer, b"hello").unwrap();
     }
 }

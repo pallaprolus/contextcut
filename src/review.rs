@@ -32,6 +32,11 @@ impl Review {
                 match pruner::decide_bytes(&bytes, path, filters, cli.max_file_size) {
                     pruner::FileDecision::Keep(content)
                     | pruner::FileDecision::Truncated(content) => {
+                        let content = if cli.strip_comments {
+                            crate::strip::strip_comments(path, &content)
+                        } else {
+                            content
+                        };
                         packed.push(PackedFile {
                             rel_path: path.clone(),
                             content,

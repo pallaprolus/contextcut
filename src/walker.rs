@@ -22,15 +22,21 @@ const VENDOR_DIRS: &[&str] = &[
     ".vscode",
 ];
 
-/// Walk `root` and return a sorted list of candidate file paths.
+/// Walk `root` and return sorted candidate paths and an unreadable count.
 ///
 /// Respects .gitignore/.ignore unless `no_gitignore` is set; vendor and
 /// cache directories are always skipped. Sorting keeps output (and insta
 /// snapshots) deterministic across filesystems.
-pub fn walk(root: &Path, no_gitignore: bool) -> Result<Vec<PathBuf>> {
+pub struct Walk {
+    pub paths: Vec<PathBuf>,
+    pub unreadable: usize,
+}
+
+pub fn walk(root: &Path, no_gitignore: bool) -> Result<Walk> {
     let mut builder = WalkBuilder::new(root);
     builder
         .hidden(false) // we want e.g. .github/workflows; .git is pruned below
+        .require_git(false)
         .git_ignore(!no_gitignore)
         .git_global(!no_gitignore)
         .git_exclude(!no_gitignore)
@@ -42,14 +48,19 @@ pub fn walk(root: &Path, no_gitignore: bool) -> Result<Vec<PathBuf>> {
             !(is_dir && (VENDOR_DIRS.contains(&name.as_ref()) || name.ends_with(".egg-info")))
         });
 
-    let mut paths: Vec<PathBuf> = builder
-        .build()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_some_and(|t| t.is_file()))
-        .map(|entry| entry.into_path())
-        .collect();
+    let mut paths = Vec::new();
+    let mut unreadable = 0;
+    for entry in builder.build() {
+        match entry {
+            Ok(entry) if entry.file_type().is_some_and(|t| t.is_file()) => {
+                paths.push(entry.into_path());
+            }
+            Err(_) => unreadable += 1,
+            _ => {}
+        }
+    }
     paths.sort();
-    Ok(paths)
+    Ok(Walk { paths, unreadable })
 }
 
 /// Match a deleted path against current ignore rules without restoring it.
@@ -121,10 +132,24 @@ mod tests {
         touch(&root.join("secrets/key.txt"));
         touch(&root.join("debug.log"));
 
-        let got = names(&walk(root, false).unwrap(), root);
+        let got = names(&walk(root, false).unwrap().paths, root);
         assert!(got.contains(&"keep.py".to_string()));
         assert!(!got.iter().any(|p| p.contains("secrets")));
         assert!(!got.contains(&"debug.log".to_string()));
+    }
+
+    #[test]
+    fn respects_gitignore_outside_git_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(root.join(".gitignore"), "*.log\n").unwrap();
+        touch(&root.join("keep.py"));
+        touch(&root.join("debug.log"));
+
+        let got = names(&walk(root, false).unwrap().paths, root);
+        assert!(got.contains(&"keep.py".to_string()));
+        assert!(!got.contains(&"debug.log".to_string()));
+        assert!(names(&walk(root, true).unwrap().paths, root).contains(&"debug.log".to_string()));
     }
 
     #[test]
@@ -135,7 +160,7 @@ mod tests {
         fs::write(root.join(".gitignore"), "*.log\n").unwrap();
         touch(&root.join("debug.log"));
 
-        let got = names(&walk(root, true).unwrap(), root);
+        let got = names(&walk(root, true).unwrap().paths, root);
         assert!(got.contains(&"debug.log".to_string()));
     }
 
@@ -148,7 +173,7 @@ mod tests {
         touch(&root.join("node_modules/x/index.js"));
         touch(&root.join("pkg.egg-info/PKG-INFO"));
 
-        let got = names(&walk(root, false).unwrap(), root);
+        let got = names(&walk(root, false).unwrap().paths, root);
         assert_eq!(got, vec!["app.py".to_string()]);
     }
 
@@ -160,9 +185,18 @@ mod tests {
         touch(&root.join("a.py"));
         touch(&root.join("m/b.py"));
 
-        let got = walk(root, false).unwrap();
+        let got = walk(root, false).unwrap().paths;
         let mut sorted = got.clone();
         sorted.sort();
         assert_eq!(got, sorted);
+    }
+
+    #[test]
+    fn counts_walk_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing");
+        let got = walk(&missing, false).unwrap();
+        assert!(got.paths.is_empty());
+        assert_eq!(got.unreadable, 1);
     }
 }

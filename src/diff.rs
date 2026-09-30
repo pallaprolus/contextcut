@@ -6,11 +6,16 @@ use anyhow::{Context, Result, bail};
 /// Resolve before using a revision, preventing option or path ambiguity.
 pub fn resolve(root: &Path, reference: &str) -> Result<String> {
     let rev = format!("{reference}^{{commit}}");
-    Ok(
-        git(root, &["rev-parse", "--verify", "--end-of-options", &rev])?
+    if let Ok(revision) = git(root, &["rev-parse", "--verify", "--end-of-options", &rev]) {
+        return Ok(revision.trim().into());
+    }
+    git(root, &["rev-parse", "--is-inside-work-tree"])?;
+    if reference == "HEAD" && git(root, &["symbolic-ref", "-q", "HEAD"]).is_ok() {
+        return Ok(git(root, &["hash-object", "-t", "tree", "--stdin"])?
             .trim()
-            .into(),
-    )
+            .into());
+    }
+    bail!("unknown git revision '{reference}'")
 }
 
 pub fn changed_files(root: &Path, reference: &str) -> Result<Vec<PathBuf>> {

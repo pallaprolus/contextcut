@@ -338,6 +338,37 @@ fn diff_outside_git_repo_fails_with_readable_error() {
 }
 
 #[test]
+fn diff_in_unborn_repo_packs_staged_and_untracked_files() {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "-q"]);
+    fs::write(repo.path().join("staged.py"), "STAGED_UNBORN = 1\n").unwrap();
+    git(repo.path(), &["add", "staged.py"]);
+    fs::write(repo.path().join("untracked.py"), "UNTRACKED_UNBORN = 1\n").unwrap();
+    contextcut()
+        .arg(repo.path())
+        .arg("--diff")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("STAGED_UNBORN")
+                .and(predicate::str::contains("UNTRACKED_UNBORN")),
+        );
+}
+
+#[test]
+fn diff_unknown_revision_has_clear_error() {
+    let repo = setup_git();
+    contextcut()
+        .arg(repo.path())
+        .args(["--diff", "missing-revision"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "error: unknown git revision 'missing-revision'",
+        ));
+}
+
+#[test]
 fn exact_claude_without_key_falls_back_gracefully() {
     let repo = setup();
     contextcut()
@@ -399,6 +430,61 @@ fn review_supports_deleted_files_and_their_importers() {
                 .and(predicate::str::contains("deleted; base revision content"))
                 .and(predicate::str::contains("## src/chain_b.py")),
         );
+}
+
+#[test]
+fn review_in_unborn_repo_includes_staged_and_untracked_files() {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "-q"]);
+    fs::write(repo.path().join("staged.py"), "REVIEW_STAGED_UNBORN = 1\n").unwrap();
+    git(repo.path(), &["add", "staged.py"]);
+    fs::write(
+        repo.path().join("untracked.py"),
+        "REVIEW_UNTRACKED_UNBORN = 1\n",
+    )
+    .unwrap();
+    contextcut()
+        .arg("review")
+        .arg(repo.path())
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("REVIEW_STAGED_UNBORN")
+                .and(predicate::str::contains("REVIEW_UNTRACKED_UNBORN")),
+        );
+}
+
+#[test]
+fn review_strips_deleted_file_comments() {
+    let repo = setup_git();
+    fs::write(
+        repo.path().join("historical.py"),
+        "# HISTORICAL_COMMENT_MARKER\nHISTORICAL_CODE_MARKER = 1\n",
+    )
+    .unwrap();
+    git(repo.path(), &["add", "historical.py"]);
+    git(
+        repo.path(),
+        &[
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-qm",
+            "historical file",
+        ],
+    );
+    fs::remove_file(repo.path().join("historical.py")).unwrap();
+    contextcut()
+        .arg("review")
+        .arg(repo.path())
+        .arg("--strip-comments")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "## historical.py\n\n```python\nHISTORICAL_CODE_MARKER = 1",
+        ));
 }
 
 #[test]
@@ -502,7 +588,9 @@ fn review_explicit_base_and_invalid_reference() {
         .args(["--base", "--help"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("git failed"));
+        .stderr(predicate::str::contains(
+            "error: unknown git revision '--help'",
+        ));
 }
 
 #[test]

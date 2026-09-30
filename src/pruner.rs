@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{self, Read};
 use std::path::Path;
 
 use anyhow::Result;
@@ -82,14 +83,38 @@ pub fn decide(path: &Path, rel: &Path, filters: &Filters, max_bytes: u64) -> Fil
     if let Some(reason) = skip_path(rel, filters) {
         return FileDecision::Skip(reason);
     }
-    let Ok(bytes) = fs::read(path) else {
+    let Ok(file) = fs::File::open(path) else {
         return FileDecision::Skip(SkipReason::Unreadable);
     };
-    decide_bytes(&bytes, rel, filters, max_bytes)
+    let Ok(full_size) = file.metadata().map(|metadata| metadata.len()) else {
+        return FileDecision::Skip(SkipReason::Unreadable);
+    };
+    let Ok(bytes) = read_prefix(file, max_bytes) else {
+        return FileDecision::Skip(SkipReason::Unreadable);
+    };
+    decide_with_size(&bytes, rel, filters, max_bytes, Some(full_size))
+}
+
+fn read_prefix(reader: impl Read, max_bytes: u64) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader
+        .take(max_bytes.saturating_add(4).max(1024))
+        .read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 /// Apply the same pruning to historical content of deleted files.
 pub fn decide_bytes(bytes: &[u8], rel: &Path, filters: &Filters, max_bytes: u64) -> FileDecision {
+    decide_with_size(bytes, rel, filters, max_bytes, None)
+}
+
+fn decide_with_size(
+    bytes: &[u8],
+    rel: &Path,
+    filters: &Filters,
+    max_bytes: u64,
+    full_size: Option<u64>,
+) -> FileDecision {
     if let Some(reason) = skip_path(rel, filters) {
         return FileDecision::Skip(reason);
     }
@@ -98,8 +123,10 @@ pub fn decide_bytes(bytes: &[u8], rel: &Path, filters: &Filters, max_bytes: u64)
     }
 
     let content = String::from_utf8_lossy(bytes);
-    if (content.len() as u64) > max_bytes {
-        return FileDecision::Truncated(truncate(&content, max_bytes as usize));
+    let total_size = full_size.unwrap_or(content.len() as u64);
+    if (content.len() as u64) > max_bytes || total_size > max_bytes {
+        let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
+        return FileDecision::Truncated(truncate(&content, cap, total_size));
     }
     FileDecision::Keep(content.into_owned())
 }
@@ -128,7 +155,7 @@ fn is_minified(name: &str) -> bool {
 }
 
 /// Cut `content` at the largest char boundary <= `cap` and append a marker.
-fn truncate(content: &str, cap: usize) -> String {
+fn truncate(content: &str, cap: usize, total_size: u64) -> String {
     let mut cut = cap.min(content.len());
     while !content.is_char_boundary(cut) {
         cut -= 1;
@@ -137,7 +164,7 @@ fn truncate(content: &str, cap: usize) -> String {
         "{}\n... [truncated: {} of {} bytes]",
         &content[..cut],
         cut,
-        content.len()
+        total_size
     )
 }
 
@@ -145,6 +172,21 @@ fn truncate(content: &str, cap: usize) -> String {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    struct CountedReader {
+        remaining: usize,
+        read: usize,
+    }
+
+    impl Read for CountedReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let n = self.remaining.min(buf.len());
+            buf[..n].fill(b'x');
+            self.remaining -= n;
+            self.read += n;
+            Ok(n)
+        }
+    }
 
     fn no_filters() -> Filters {
         Filters::new(&[], &[]).unwrap()
@@ -210,7 +252,7 @@ mod tests {
     fn truncates_without_splitting_chars() {
         // 'é' is 2 bytes; cap lands mid-char and must back off, not panic.
         let content = "é".repeat(100);
-        let result = truncate(&content, 33);
+        let result = truncate(&content, 33, content.len() as u64);
         assert!(result.contains("[truncated: 32 of 200 bytes]"));
         assert!(result.starts_with(&"é".repeat(16)));
     }
@@ -227,6 +269,17 @@ mod tests {
             }
             other => panic!("expected Truncated, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn reads_only_bounded_prefix_of_large_files() {
+        let mut reader = CountedReader {
+            remaining: 1_000_000,
+            read: 0,
+        };
+        let bytes = read_prefix(&mut reader, 100).unwrap();
+        assert!(reader.read <= 1024, "read {} bytes", reader.read);
+        assert!(bytes.len() <= 1024);
     }
 
     #[test]
