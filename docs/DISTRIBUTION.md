@@ -21,7 +21,7 @@ Publishing the tap is an explicit maintainer step using normal GitHub access; no
 ```bash
 cargo build --release --locked
 python3 scripts/release.py package --target aarch64-apple-darwin --binary target/release/contextcut
-python3 scripts/release.py smoke dist/contextcut-0.3.0-aarch64-apple-darwin.tar.gz
+python3 scripts/release.py smoke dist/contextcut-0.3.1-aarch64-apple-darwin.tar.gz
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 

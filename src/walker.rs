@@ -33,15 +33,19 @@ pub struct Walk {
 }
 
 pub fn walk(root: &Path, no_gitignore: bool) -> Result<Walk> {
+    // Outside any git repo, still honor the root's own .gitignore, but never
+    // ancestors' (e.g. a dotfiles-style ~/.gitignore). Inside a repo keep
+    // git semantics so repo boundaries and .git/info/exclude hold.
+    let in_git = inside_git_repo(root);
     let mut builder = WalkBuilder::new(root);
     builder
         .hidden(false) // we want e.g. .github/workflows; .git is pruned below
-        .require_git(false)
+        .require_git(in_git)
         .git_ignore(!no_gitignore)
         .git_global(!no_gitignore)
         .git_exclude(!no_gitignore)
         .ignore(!no_gitignore)
-        .parents(!no_gitignore)
+        .parents(!no_gitignore && in_git)
         .filter_entry(|entry| {
             let is_dir = entry.file_type().is_some_and(|t| t.is_dir());
             let name = entry.file_name().to_string_lossy();
@@ -61,6 +65,12 @@ pub fn walk(root: &Path, no_gitignore: bool) -> Result<Walk> {
     }
     paths.sort();
     Ok(Walk { paths, unreadable })
+}
+
+/// Whether `root` or any ancestor has a `.git` entry (dir or worktree file).
+fn inside_git_repo(root: &Path) -> bool {
+    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    root.ancestors().any(|dir| dir.join(".git").exists())
 }
 
 /// Match a deleted path against current ignore rules without restoring it.
@@ -189,6 +199,27 @@ mod tests {
         let mut sorted = got.clone();
         sorted.sort();
         assert_eq!(got, sorted);
+    }
+
+    #[test]
+    fn non_git_root_ignores_ancestor_gitignore() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(".gitignore"), "*.py\n").unwrap();
+        let root = dir.path().join("proj");
+        touch(&root.join("a.py"));
+        let got = names(&walk(&root, false).unwrap().paths, &root);
+        assert_eq!(got, vec!["a.py".to_string()]);
+    }
+
+    #[test]
+    fn repo_ignores_gitignore_above_repo_root() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(".gitignore"), "*\n").unwrap();
+        let root = dir.path().join("proj");
+        fs::create_dir_all(root.join(".git")).unwrap();
+        touch(&root.join("a.py"));
+        let got = names(&walk(&root, false).unwrap().paths, &root);
+        assert_eq!(got, vec!["a.py".to_string()]);
     }
 
     #[test]

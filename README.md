@@ -71,9 +71,9 @@ Archives are named `contextcut-<version>-<target>.tar.gz` (`.zip` on Windows). C
 For example, after downloading the macOS Apple Silicon archive and checksum file:
 
 ```bash
-shasum -a 256 contextcut-0.3.0-aarch64-apple-darwin.tar.gz
+shasum -a 256 contextcut-0.3.1-aarch64-apple-darwin.tar.gz
 # Compare with its entry in SHA256SUMS, then extract:
-tar -xzf contextcut-0.3.0-aarch64-apple-darwin.tar.gz
+tar -xzf contextcut-0.3.1-aarch64-apple-darwin.tar.gz
 mkdir -p "$HOME/.local/bin"
 install -m 755 contextcut "$HOME/.local/bin/contextcut"
 # Add $HOME/.local/bin to your shell's PATH if it is not already there.
@@ -82,12 +82,12 @@ install -m 755 contextcut "$HOME/.local/bin/contextcut"
 To build the same version with Rust:
 
 ```bash
-cargo install --git https://github.com/pallaprolus/contextcut --tag v0.3.0 --locked
+cargo install --git https://github.com/pallaprolus/contextcut --tag v0.3.1 --locked
 # Or from a checkout:
 cargo install --path . --locked
 ```
 
-The existing crates.io release is v0.2.1; `cargo install contextcut` does not yet include the newer review, budget, and clipboard features. GitHub binaries and Homebrew provide v0.3.0.
+The existing crates.io release is v0.2.1; `cargo install contextcut` does not yet include the newer review, budget, and clipboard features. GitHub binaries and Homebrew provide v0.3.1.
 
 `--copy` uses `pbcopy` on macOS, PowerShell on Windows, and `wl-copy`, `xclip`, or `xsel` on Linux. On a headless machine or if no clipboard helper is available, use `-o packed.md`. `--copy -o packed.md` both saves and copies; the saved file remains available if copying fails. `--copy` cannot be combined with `--tokens-only`.
 

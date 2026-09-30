@@ -123,7 +123,9 @@ fn decide_with_size(
     }
 
     let content = String::from_utf8_lossy(bytes);
-    let total_size = full_size.unwrap_or(content.len() as u64);
+    // Report the total in the same (lossy-decoded) units as the cut offset.
+    let total_size =
+        content.len() as u64 + full_size.map_or(0, |n| n.saturating_sub(bytes.len() as u64));
     if (content.len() as u64) > max_bytes || total_size > max_bytes {
         let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
         return FileDecision::Truncated(truncate(&content, cap, total_size));

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.1 — 2026-09-30
+
+### Fixed
+- `--diff` and `review` work in a repository with no commits yet: every file is treated as an addition. An unknown revision now reports `unknown git revision '<ref>'`.
+- A directory that is not inside a Git repository now honors its own `.gitignore` (ancestor ignore files outside a repository are not applied).
+- Write errors on stdout now fail the run; a closed pipe is still ignored.
+- Oversized files are read only up to the size cap; the truncation marker reports the full file size.
+- Traversal errors (for example, unreadable subdirectories) count toward the `unreadable` total instead of being dropped.
+- `review --strip-comments` strips deleted-file bodies too.
+- Code fences grow past backtick runs indented by up to three spaces, so file content cannot close its fence early.
+- A NUL byte anywhere in a file marks it binary, not only within the first 1 KiB.
+- Import graph: Rust `mod x;` inside `foo.rs` resolves to `foo/x.rs`; Python `from pkg import sub` resolves `pkg/sub/__init__.py`; literal JS/TS `import('./x')` is recognized; Go imports still resolve when `go.mod` is filtered out of the output.
+
 ## 0.3.0 — 2026-09-12
 
 ### Added
