@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Import graph over the packed file set. Edges only exist between files
@@ -13,8 +14,17 @@ pub struct Graph {
 impl Graph {
     /// Build the graph from (relative path, content) pairs.
     pub fn build(files: &[(PathBuf, String)]) -> Self {
+        Self::build_with_root(None, files)
+    }
+
+    /// Build the graph, reading the root go.mod when it was not packed.
+    pub fn build_at(root: &Path, files: &[(PathBuf, String)]) -> Self {
+        Self::build_with_root(Some(root), files)
+    }
+
+    fn build_with_root(root: Option<&Path>, files: &[(PathBuf, String)]) -> Self {
         let file_set: HashSet<PathBuf> = files.iter().map(|(p, _)| p.clone()).collect();
-        let go_module = go_module_path(files);
+        let go_module = go_module_path(root, files);
 
         let mut forward: BTreeMap<PathBuf, BTreeSet<PathBuf>> = BTreeMap::new();
         let mut reverse: BTreeMap<PathBuf, BTreeSet<PathBuf>> = BTreeMap::new();
@@ -178,13 +188,18 @@ fn resolve_py_module(
         ) {
             found.push(hit);
         }
-        // … plus each imported name that is itself a submodule: a/b/c.py.
+        // … plus each imported name that is itself a submodule or package.
         for name in imported_names {
-            if !name.is_empty() {
-                let candidate = stem.join(name).with_extension("py");
-                if files.contains(&candidate) {
-                    found.push(candidate);
-                }
+            if !name.is_empty()
+                && let Some(hit) = first_existing(
+                    vec![
+                        stem.join(name).with_extension("py"),
+                        stem.join(name).join("__init__.py"),
+                    ],
+                    files,
+                )
+            {
+                found.push(hit);
             }
         }
     }
@@ -208,10 +223,17 @@ fn js_imports(source: &Path, content: &str, files: &HashSet<PathBuf>) -> Vec<Pat
                 specs.push(spec); // bare `import './side-effect'`
             }
         }
-        // require('...') anywhere on the line; resolution gates false hits.
+        // require('...') and literal import('...') anywhere on the line.
         let mut rest = trimmed;
         while let Some(idx) = rest.find("require(") {
             rest = &rest[idx + "require(".len()..];
+            if let Some(spec) = leading_quoted(rest) {
+                specs.push(spec);
+            }
+        }
+        let mut rest = trimmed;
+        while let Some(idx) = rest.find("import(") {
+            rest = &rest[idx + "import(".len()..];
             if let Some(spec) = leading_quoted(rest) {
                 specs.push(spec);
             }
@@ -280,10 +302,18 @@ fn rust_imports(source: &Path, content: &str, files: &HashSet<PathBuf>) -> Vec<P
         if let Some(rest) = trimmed.strip_prefix("mod ") {
             let name = rest.trim_end().trim_end_matches(';');
             if name.chars().all(|c| c.is_alphanumeric() || c == '_') && !name.is_empty() {
-                let candidates = vec![
+                let mut candidates = Vec::new();
+                if let Some(stem) = source.file_stem().and_then(|s| s.to_str())
+                    && !["lib", "main", "mod"].contains(&stem)
+                {
+                    let module_dir = source_dir.join(stem);
+                    candidates.push(module_dir.join(format!("{name}.rs")));
+                    candidates.push(module_dir.join(name).join("mod.rs"));
+                }
+                candidates.extend([
                     source_dir.join(format!("{name}.rs")),
                     source_dir.join(name).join("mod.rs"),
-                ];
+                ]);
                 if let Some(hit) = first_existing(candidates, files) {
                     out.push(hit);
                 }
@@ -314,16 +344,16 @@ fn rust_imports(source: &Path, content: &str, files: &HashSet<PathBuf>) -> Vec<P
 // ---------------- Go ----------------
 
 /// The `module` line from go.mod, if the repo has one.
-fn go_module_path(files: &[(PathBuf, String)]) -> Option<String> {
-    files
+fn go_module_path(root: Option<&Path>, files: &[(PathBuf, String)]) -> Option<String> {
+    let content = files
         .iter()
         .find(|(p, _)| p.file_name().is_some_and(|n| n == "go.mod"))
-        .and_then(|(_, content)| {
-            content
-                .lines()
-                .find_map(|l| l.trim().strip_prefix("module "))
-                .map(|m| m.trim().to_string())
-        })
+        .map(|(_, content)| content.clone())
+        .or_else(|| root.and_then(|root| fs::read_to_string(root.join("go.mod")).ok()))?;
+    content
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("module "))
+        .map(|m| m.trim().to_string())
 }
 
 fn go_imports(content: &str, module: Option<&str>, files: &HashSet<PathBuf>) -> Vec<PathBuf> {
@@ -410,6 +440,16 @@ mod tests {
     }
 
     #[test]
+    fn python_from_import_subpackage_init() {
+        let g = graph(&[
+            ("pkg/__init__.py", ""),
+            ("pkg/subpkg/__init__.py", ""),
+            ("main.py", "from pkg import subpkg\n"),
+        ]);
+        assert!(edge(&g, "main.py", "pkg/subpkg/__init__.py"));
+    }
+
+    #[test]
     fn python_src_layout_absolute_imports() {
         // Modern src/ layout: tests import the package absolutely.
         let g = graph(&[
@@ -446,6 +486,20 @@ mod tests {
     }
 
     #[test]
+    fn js_literal_dynamic_imports() {
+        let g = graph(&[
+            (
+                "app.ts",
+                "import('./util');\nconst m = await import(\"./lib\");\n",
+            ),
+            ("util.ts", ""),
+            ("lib/index.ts", ""),
+        ]);
+        assert!(edge(&g, "app.ts", "util.ts"));
+        assert!(edge(&g, "app.ts", "lib/index.ts"));
+    }
+
+    #[test]
     fn js_traps_bare_packages_and_unresolved() {
         let g = graph(&[
             (
@@ -467,6 +521,17 @@ mod tests {
         ]);
         assert!(edge(&g, "src/main.rs", "src/walker.rs"));
         assert!(edge(&g, "src/main.rs", "src/pruner.rs"));
+    }
+
+    #[test]
+    fn rust_file_module_owns_named_directory() {
+        let g = graph(&[
+            ("src/foo.rs", "mod bar;\nmod baz;\n"),
+            ("src/foo/bar.rs", ""),
+            ("src/foo/baz/mod.rs", ""),
+        ]);
+        assert!(edge(&g, "src/foo.rs", "src/foo/bar.rs"));
+        assert!(edge(&g, "src/foo.rs", "src/foo/baz/mod.rs"));
     }
 
     #[test]

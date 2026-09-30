@@ -42,6 +42,59 @@ fn contextcut() -> Command {
 }
 
 #[test]
+fn empty_directory_packs_zero_files() {
+    let repo = tempfile::tempdir().unwrap();
+    contextcut()
+        .arg(repo.path())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Files packed:  0"));
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_loop_packs_real_file_once() {
+    use std::os::unix::fs::symlink;
+
+    let repo = tempfile::tempdir().unwrap();
+    fs::create_dir(repo.path().join("child")).unwrap();
+    fs::write(repo.path().join("child/real.rs"), "UNIQUE_REAL_FILE\n").unwrap();
+    symlink(repo.path(), repo.path().join("child/parent")).unwrap();
+    let output = contextcut()
+        .arg(repo.path())
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let markdown = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(markdown.matches("## child/real.rs").count(), 1);
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("Files packed:  1")
+    );
+}
+
+#[test]
+fn go_imports_work_when_go_mod_is_filtered_out() {
+    let repo = tempfile::tempdir().unwrap();
+    fs::create_dir(repo.path().join("util")).unwrap();
+    fs::write(repo.path().join("go.mod"), "module example.com/myapp\n").unwrap();
+    fs::write(
+        repo.path().join("main.go"),
+        "package main\nimport \"example.com/myapp/util\"\n",
+    )
+    .unwrap();
+    fs::write(repo.path().join("util/strings.go"), "package util\n").unwrap();
+    contextcut()
+        .arg(repo.path())
+        .args(["--include", "**/*.go", "--map"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("→ util/strings.go"));
+}
+
+#[test]
 fn default_pack_includes_code_and_excludes_noise() {
     let repo = setup();
     contextcut()
