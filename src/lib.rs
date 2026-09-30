@@ -74,7 +74,7 @@ pub fn run(cli: &Cli) -> Result<()> {
             .iter()
             .map(|f| (f.rel_path.clone(), f.content.clone()))
             .collect();
-        Some(deps::Graph::build(&entries))
+        Some(deps::Graph::build_at(root, &entries))
     } else {
         None
     };

@@ -118,7 +118,7 @@ fn decide_with_size(
     if let Some(reason) = skip_path(rel, filters) {
         return FileDecision::Skip(reason);
     }
-    if inspect(&bytes[..bytes.len().min(1024)]) == ContentType::BINARY {
+    if bytes.contains(&0) || inspect(&bytes[..bytes.len().min(1024)]) == ContentType::BINARY {
         return FileDecision::Skip(SkipReason::Binary);
     }
 
@@ -245,6 +245,16 @@ mod tests {
         assert!(matches!(
             decide_named(dir.path(), "bom.txt", "\u{feff}hello".as_bytes()),
             FileDecision::Keep(_)
+        ));
+    }
+
+    #[test]
+    fn detects_nul_after_inspection_prefix() {
+        let mut bytes = vec![b'a'; 1024];
+        bytes.push(0);
+        assert!(matches!(
+            decide_bytes(&bytes, Path::new("late-nul.txt"), &no_filters(), 65536),
+            FileDecision::Skip(SkipReason::Binary)
         ));
     }
 

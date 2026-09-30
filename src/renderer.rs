@@ -49,7 +49,14 @@ pub(crate) fn display_path(path: &Path) -> String {
 pub(crate) fn fence_for(content: &str) -> String {
     let longest_run = content
         .lines()
-        .map(|l| l.chars().take_while(|c| *c == '`').count())
+        .map(|line| {
+            let indent = line.bytes().take_while(|b| *b == b' ').count();
+            if indent > 3 {
+                0
+            } else {
+                line[indent..].bytes().take_while(|b| *b == b'`').count()
+            }
+        })
         .max()
         .unwrap_or(0);
     "`".repeat(longest_run.max(2) + 1)
@@ -157,6 +164,12 @@ mod tests {
         assert_eq!(fence_for("has ```python inside"), "```"); // inline, not line-leading run? no: take_while from line start
         let block = "```\ncode\n```";
         assert_eq!(fence_for(block), "````");
+    }
+
+    #[test]
+    fn fence_grows_past_indented_closing_fence() {
+        assert_eq!(fence_for("one\n   ````\nlast"), "`````");
+        assert_eq!(fence_for("    ````"), "```");
     }
 
     #[test]
