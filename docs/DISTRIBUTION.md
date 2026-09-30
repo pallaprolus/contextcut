@@ -14,7 +14,7 @@ The Homebrew tap is [pallaprolus/homebrew-tap](https://github.com/pallaprolus/ho
 6. Publish the draft: `gh release edit vX.Y.Z --draft=false --latest`.
 7. Copy the released `contextcut.rb` to `Formula/contextcut.rb` in the Homebrew tap, commit, and push it. Run the tap's install/test workflow; it exercises the public download URLs on macOS and Linux.
 
-Publishing the tap is an explicit maintainer step using normal GitHub access; no cross-repository token is stored in the ContextCut workflow. A crates.io release is separate from GitHub binaries/Homebrew and requires `cargo publish`. Until that is done, use the documented Git-tag Cargo installation command for the same version.
+Publishing the tap is an explicit maintainer step using normal GitHub access; no cross-repository token is stored in the ContextCut workflow. A crates.io release is separate from GitHub binaries/Homebrew: after publishing the GitHub release, run `cargo publish --locked` from the release commit.
 
 ## Local archive smoke test
 

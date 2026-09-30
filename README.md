@@ -79,15 +79,13 @@ install -m 755 contextcut "$HOME/.local/bin/contextcut"
 # Add $HOME/.local/bin to your shell's PATH if it is not already there.
 ```
 
-To build the same version with Rust:
+To build from source with Rust:
 
 ```bash
-cargo install --git https://github.com/pallaprolus/contextcut --tag v0.3.1 --locked
+cargo install contextcut --locked
 # Or from a checkout:
 cargo install --path . --locked
 ```
-
-The existing crates.io release is v0.2.1; `cargo install contextcut` does not yet include the newer review, budget, and clipboard features. GitHub binaries and Homebrew provide v0.3.1.
 
 `--copy` uses `pbcopy` on macOS, PowerShell on Windows, and `wl-copy`, `xclip`, or `xsel` on Linux. On a headless machine or if no clipboard helper is available, use `-o packed.md`. `--copy -o packed.md` both saves and copies; the saved file remains available if copying fails. `--copy` cannot be combined with `--tokens-only`.
 
